@@ -30,7 +30,7 @@ fn split_tle(tles: String) -> Vec<String> {
     for (index, line) in tles.lines().enumerate() {
         grouped.push_str(line);
         grouped.push_str("\n");
-        if ((index + 1 ) % 3 == 0) {
+        if (index + 1 ) % 3 == 0 {
             lines.push(grouped.clone());
             grouped.clear();
         }
