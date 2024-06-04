@@ -1,0 +1,9 @@
+[package]
+name = "src"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+error-chain = "0.12.4"
+reqwest = "0.12.4"
+tokio = { version = "1", features = ["full"] }
