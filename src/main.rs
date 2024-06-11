@@ -9,6 +9,34 @@ error_chain! {
     }
 }
 
+/* 
+Potential implementation of Query struct and strict query checking.
+
+enum QueryType {
+    CategoryNumber,
+    InternationalDesignator,
+    Group,
+    Name,
+    Special,
+}
+
+impl QueryType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            QueryType::CategoryNumber => "CATNR",
+            QueryType::InternationalDesignator => "INTDES",
+            QueryType::Group => "GROUP",
+            QueryType::Name => "NAME",
+            QueryType::Special => "SPECIAL",
+        }
+    }
+}
+
+struct CelestrakQuery {
+    query: QueryType,
+    value: String,
+} */
+
 pub struct TLE {
     pub name: String,
     pub satellite_number: u32,
@@ -31,7 +59,7 @@ pub struct TLE {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let res = fetch_tle("weather".to_string()).await?;
+    let res = fetch_tle("GROUP=weather".to_string()).await?;
     let lines = split_tle(res.to_string());
 
     println!("{:?}", lines[0]);
@@ -45,10 +73,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn fetch_tle(group: String) -> Result<String> {
+async fn fetch_tle(query: String) -> Result<String> {
+
     let res = reqwest::get(&format!(
-        "https://celestrak.org/NORAD/elements/gp.php?GROUP={}&FORMAT=tle",
-        group
+        "https://celestrak.org/NORAD/elements/gp.php?{}&FORMAT=tle",
+        query
     ))
     .await?;
 
@@ -145,4 +174,3 @@ fn get_epoch(epoch: String) -> i64 {
     println!("Date: {}", date_time.and_utc().to_rfc3339());
     return date_time.and_utc().timestamp();
 }
-
