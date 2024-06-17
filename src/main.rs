@@ -1,4 +1,4 @@
-use chrono::{Days, Duration, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{Duration, NaiveDateTime, NaiveDate, NaiveTime, DateTime, Utc};
 use error_chain::error_chain;
 use std::fs::{self, write};
 
@@ -9,7 +9,7 @@ error_chain! {
     }
 }
 
-/* 
+/*
 Potential implementation of Query struct and strict query checking.
 
 enum QueryType {
@@ -43,6 +43,7 @@ pub struct TLE {
     pub classification: char,
     pub international_designator: String,
     pub epoch: i64,
+    pub date_time: String,
     pub first_derivative_mean_motion: f64,
     pub second_derivative_mean_motion: f64,
     pub drag_term: f64,
@@ -74,7 +75,6 @@ async fn main() -> Result<()> {
 }
 
 async fn fetch_tle(query: String) -> Result<String> {
-
     let res = reqwest::get(&format!(
         "https://celestrak.org/NORAD/elements/gp.php?{}&FORMAT=tle",
         query
@@ -108,22 +108,24 @@ fn parse_tle(tle: &String) {
     let line1 = lines.next().expect("Expected TLE Line 1");
     let line2 = lines.next().expect("Expected TLE Line 2");
 
-    let mut epoch: u32 = 0;
+    let mut epoch: DateTime<Utc> = get_epoch_from_tle(line1[18..=32].trim().to_string());
 
-    println!("{}", get_epoch(line1[18..=32].trim().to_string()));
     println!("{}", (line1[18..=32].trim().to_string()));
 
-    /*     let mut parsed_tle: TLE = TLE {
+    let mut parsed_tle: TLE = TLE {
         name: name,
-        satellite_number: line1[2..7].trim().parse::<u32>().expect("Could not parse Sat Num."),
+        satellite_number: line1[2..7].trim().parse::<u32>().expect("Could not parse satellite_number."),
         classification: line1[7..8].chars().next().expect("Could not parse classification."),
         international_designator: line1[9..17].trim().to_string(),
-        epoch: get_epoch(line1[18..=32].trim().to_string())
-    } */
+        epoch: epoch.timestamp(),
+        date_time: epoch.to_rfc3339(),
+        first_derivative_mean_motion: line1[34..43].trim().parse::<f64>().expect("Could not parse first_derivative_mean_motion")
+    };
 }
 
-fn get_epoch(epoch: String) -> i64 {
-    let mut epoch_year: i32 = epoch[0..2]
+fn get_epoch_from_tle(tle_epoch: String) -> DateTime<Utc> {
+    // get year from first 2 chars
+    let mut epoch_year: i32 = tle_epoch[0..2]
         .to_string()
         .parse::<i32>()
         .expect("Could not parse epoch year.");
@@ -132,30 +134,29 @@ fn get_epoch(epoch: String) -> i64 {
     } else {
         epoch_year = 1900 + epoch_year;
     }
+    // get decimal day from remainder of string
+    let decimal_day: String = tle_epoch[2..].to_string();
 
-    println!("Year: {}", epoch_year);
-
-    let decimal_day: String = epoch[2..].to_string();
+    // get the full num of days
     let full_day: Vec<&str> = decimal_day.split_terminator(".").collect();
 
+    // get fractional day
     let mut day_fraction: f64 = (".".to_owned() + full_day[1])
         .parse::<f64>()
         .expect("Could not parse day fraction.");
 
-    let hours = (day_fraction * 24.0).floor();
-    println!("Hours: {}", hours);
+    // calc hours minutes, seconds milliseconds
+    let hours: f64  = (day_fraction * 24.0).floor();
     day_fraction -= hours / 24.0;
-    let minutes = (day_fraction * 24.0 * 60.0).floor();
-    println!("Minutes: {}", minutes);
+    let minutes: f64 = (day_fraction * 24.0 * 60.0).floor();
     day_fraction -= minutes / (24.0 * 60.0);
-    let seconds = (day_fraction * 24.0 * 60.0 * 60.0).floor();
-    println!("Seconds: {}", seconds);
+    let seconds: f64 = (day_fraction * 24.0 * 60.0 * 60.0).floor();
     day_fraction -= seconds / (24.0 * 60.0 * 60.0);
-    let milliseconds = ((day_fraction * 24.0 * 60.0 * 60.0 * 1000.0) + 0.5).floor();
-    println!("Milliseconds: {}", milliseconds);
+    let milliseconds: f64 = ((day_fraction * 24.0 * 60.0 * 60.0 * 1000.0) + 0.5).floor();
 
-    let date = NaiveDate::from_ymd_opt(epoch_year, 1, 1).unwrap();
-    let time = NaiveTime::from_hms_milli_opt(
+    // create date time and correct time on jan 1st
+    let date: NaiveDate = NaiveDate::from_ymd_opt(epoch_year, 1, 1).unwrap();
+    let time: NaiveTime = NaiveTime::from_hms_milli_opt(
         hours as u32,
         minutes as u32,
         seconds as u32,
@@ -164,13 +165,12 @@ fn get_epoch(epoch: String) -> i64 {
     .unwrap();
     let mut date_time = NaiveDateTime::new(date, time);
 
+    // add days - 1 to date_time to get correct day, remove 1 because the days start from 0 and our datetime starts from 1.
     let days = full_day[0]
         .to_string()
         .parse::<i64>()
         .expect("Could not parse full days.");
-    println!("Days: {:?}", days);
     date_time += Duration::days(days - 1);
 
-    println!("Date: {}", date_time.and_utc().to_rfc3339());
-    return date_time.and_utc().timestamp();
+    return date_time.and_utc();
 }
