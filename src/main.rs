@@ -1,6 +1,6 @@
-use chrono::{Duration, NaiveDateTime, NaiveDate, NaiveTime, DateTime, Utc};
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use error_chain::error_chain;
-use std::fs::{self, write};
+use std::{fmt::{Display, Formatter}, fs::{self, write}};
 
 error_chain! {
     foreign_links {
@@ -35,7 +35,8 @@ impl QueryType {
 struct CelestrakQuery {
     query: QueryType,
     value: String,
-} */
+}
+*/
 
 pub struct TLE {
     pub name: String,
@@ -58,19 +59,46 @@ pub struct TLE {
     pub revolution_number: u32,
 }
 
+impl Display for TLE {
+
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> ::std::fmt::Result { 
+        write!(
+            formatter, 
+            "{}\nSatellite #: {}\nClassification: {}\nInternational Designator: {}\nElement #: {}\nEpoch: {}\nEpoch (ISO8601) {}\nMean Motion: {}\nFirst Derivative Mean Motion: {}\nSecond Derivative Mean Motion: {}\nDrag Term: {}\nInclination: {}\nRight Angle of Ascencion: {}\nEccentricity: {}\nArgument of Perigee: {}\nMean Anomaly: {}\nRevolution #: {}", 
+            self.name, 
+            self.satellite_number, 
+            self.classification,
+            self.international_designator,
+            self.element_number,
+            self.epoch, 
+            self.date_time,
+            self.mean_motion, 
+            self.first_derivative_mean_motion,
+            self.second_derivative_mean_motion, 
+            self.drag_term, 
+            self.inclination, 
+            self.right_ascension, 
+            self.eccentricity, 
+            self.argument_of_perigee, 
+            self.mean_anomaly, 
+            self.revolution_number
+        )
+
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let res = fetch_tle("GROUP=weather".to_string()).await?;
     let lines = split_tle(res.to_string());
-
-    println!("{:?}", lines[0]);
-    parse_tle(&lines[0]);
-    if fs::metadata("../test.txt").is_ok() {
-        write("../test.txt", lines.join("\n")).expect("");
+    println!("{}", lines[0].to_string());
+    println!("{}", parse_tle(&lines[0]).to_string());
+/*     let parsed = lines.iter().map(parse_tle);
+    if fs::metadata("./test.txt").is_ok() {
+        write("./test.txt", parsed.map(|tle: TLE| tle.to_string()).collect::<Vec<String>>().join("\n\n"))?;
     } else {
-        fs::File::create("../test.txt")?;
-        write("../test.txt", lines.join("\n")).expect("");
-    }
+        write("./test.txt", parsed.map(|tle: TLE| tle.to_string()).collect::<Vec<String>>().join("\n\n"))?;
+    } */
     Ok(())
 }
 
@@ -80,8 +108,8 @@ async fn fetch_tle(query: String) -> Result<String> {
         query
     ))
     .await?;
-
     let body = res.text().await?;
+
     Ok(body)
 }
 
@@ -101,26 +129,61 @@ fn split_tle(tles: String) -> Vec<String> {
     return lines;
 }
 
-fn parse_tle(tle: &String) {
+fn parse_tle(tle: &String) -> TLE {
     let mut lines = tle.lines();
 
     let name = lines.next().expect("Expected TLE Name Line").to_string();
     let line1 = lines.next().expect("Expected TLE Line 1");
     let line2 = lines.next().expect("Expected TLE Line 2");
 
-    let mut epoch: DateTime<Utc> = get_epoch_from_tle(line1[18..=32].trim().to_string());
+    let epoch: DateTime<Utc> = get_epoch_from_tle(line1[18..=32].trim().to_string());
 
-    println!("{}", (line1[18..=32].trim().to_string()));
-
-    let mut parsed_tle: TLE = TLE {
+    let parsed_tle: TLE = TLE {
         name: name,
-        satellite_number: line1[2..7].trim().parse::<u32>().expect("Could not parse satellite_number."),
-        classification: line1[7..8].chars().next().expect("Could not parse classification."),
+        satellite_number: line1[2..7]
+            .trim()
+            .parse::<u32>()
+            .expect("Could not parse satellite_number."),
+        classification: line1[7..8].trim()
+            .chars()
+            .next()
+            .expect("Could not parse classification."),
         international_designator: line1[9..17].trim().to_string(),
         epoch: epoch.timestamp(),
         date_time: epoch.to_rfc3339(),
-        first_derivative_mean_motion: line1[34..43].trim().parse::<f64>().expect("Could not parse first_derivative_mean_motion")
+        first_derivative_mean_motion: line1[34..43]
+            .trim()
+            .parse::<f64>()
+            .expect("Could not parse first_derivative_mean_motion."),
+        second_derivative_mean_motion: parse_decimal_point_assumed(line1[45..52].trim().to_string()),
+        drag_term: parse_decimal_point_assumed(line1[54..61].trim().to_string()),
+        ephemeris_type: line1[62..63].trim()
+            .parse::<u32>()
+            .expect("Could not parse ephemeris_type."),
+        element_number: line1[65..68].trim()
+            .parse::<u32>()
+            .expect("Could not parse element_number."),
+        inclination: line2[9..16].trim()
+            .parse::<f64>()
+            .expect("Could not parse inclination"),
+        right_ascension: line2[17..25].trim()
+            .parse::<f64>()
+            .expect("Could not parse right_ascencion."),
+        eccentricity: parse_decimal_point_assumed(line2[27..33].trim().to_string()),
+        argument_of_perigee: line2[35..42].trim()
+            .parse::<f64>()
+            .expect("Could not parse argument_of_perigee."),
+        mean_anomaly: line2[44..51].trim()
+            .parse::<f64>()
+            .expect("Could not parse mean_anomaly."),
+        mean_motion: line2[52..63].trim()
+            .parse::<f64>()
+            .expect("Could not parse mean_motion."),
+        revolution_number: line2[64..68].trim()
+            .parse::<u32>()
+            .expect("Could not parse revolution_number."),
     };
+    return parsed_tle;
 }
 
 fn get_epoch_from_tle(tle_epoch: String) -> DateTime<Utc> {
@@ -146,7 +209,7 @@ fn get_epoch_from_tle(tle_epoch: String) -> DateTime<Utc> {
         .expect("Could not parse day fraction.");
 
     // calc hours minutes, seconds milliseconds
-    let hours: f64  = (day_fraction * 24.0).floor();
+    let hours: f64 = (day_fraction * 24.0).floor();
     day_fraction -= hours / 24.0;
     let minutes: f64 = (day_fraction * 24.0 * 60.0).floor();
     day_fraction -= minutes / (24.0 * 60.0);
@@ -173,4 +236,43 @@ fn get_epoch_from_tle(tle_epoch: String) -> DateTime<Utc> {
     date_time += Duration::days(days - 1);
 
     return date_time.and_utc();
+}
+
+fn parse_decimal_point_assumed(input: String) -> f64 {
+    if input.contains('+') || input.contains('-') && !input.starts_with('-') || input.matches('-').count() == 2 {
+        let exp_index: usize;
+        if let Some(index) = input.rfind('+') {
+            exp_index = index;
+        } else {
+            exp_index = input.rfind('-').unwrap();
+        }
+
+        let base;
+        if input.starts_with('-') {
+            base = format!("-0.{}", &input[1..exp_index])
+                .parse::<f64>()
+                .expect("Could not parse base.");
+        } else {
+            base = format!("0.{}", &input[0..exp_index])
+                .parse::<f64>()
+                .expect("Could not parse base.");
+        }
+        let exponent;
+        if input[exp_index..].starts_with('+') {
+            exponent = input[(exp_index + 1)..].parse::<f64>()
+            .expect("Could not parse exponent.")
+        } else {
+            exponent = input[exp_index..].parse::<f64>()
+            .expect("Could not parse exponent.")
+        }
+        return format!("{:.8}",base * 10f64.powf(exponent)).parse::<f64>().expect("Could not parse rounded decimal point assumed.")
+    } else if input.contains('-') {
+        return format!("-0.{}", input)
+            .parse::<f64>()
+            .expect("Could not parse decimal point assumed value at parse_decimal_point_assumed")
+    } else {
+        return format!("0.{}", input)
+            .parse::<f64>()
+            .expect("Could not parse decimal point assumed value at parse_decimal_point_assumed")
+    }
 }
