@@ -2,3 +2,4 @@
 /.devcontainer
 /.github
 /Cargo.lock
+/output
