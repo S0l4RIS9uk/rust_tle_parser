@@ -38,7 +38,7 @@ struct CelestrakQuery {
     value: String,
 }
 */
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 pub struct TLE {
     pub name: String,
     pub satellite_number: u32,
@@ -105,6 +105,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+// TODO: Strictly type query options, validate query & cache results.
 async fn fetch_tle(query: String) -> Result<String> {
 /*     let res = reqwest::get(&format!(
         "https://celestrak.org/NORAD/elements/gp.php?{}&FORMAT=tle",
@@ -353,9 +354,8 @@ fn parse_tle(tle: &String) -> TLE {
     let mut lines = tle.lines();
 
     let name = lines.next().expect("Expected TLE Name Line").trim().to_string();
-    let line1 = lines.next().expect("Expected TLE Line 1");
-    let line2 = lines.next().expect("Expected TLE Line 2");
-
+    let line1 = lines.next().expect("Expected TLE Line 1").trim();
+    let line2 = lines.next().expect("Expected TLE Line 2").trim();
     let epoch: DateTime<Utc> = get_epoch_from_tle(line1[18..=32].trim().to_string());
 
     let parsed_tle: TLE = TLE {
@@ -389,17 +389,17 @@ fn parse_tle(tle: &String) -> TLE {
         right_ascension: line2[17..25].trim()
             .parse::<f64>()
             .expect("Could not parse right_ascencion."),
-        eccentricity: parse_decimal_point_assumed(line2[27..33].trim().to_string()),
-        argument_of_perigee: line2[35..42].trim()
+        eccentricity: parse_decimal_point_assumed(line2[26..33].trim().to_string()),
+        argument_of_perigee: line2[34..42].trim()
             .parse::<f64>()
             .expect("Could not parse argument_of_perigee."),
-        mean_anomaly: line2[44..51].trim()
+        mean_anomaly: line2[42..51].trim()
             .parse::<f64>()
             .expect("Could not parse mean_anomaly."),
         mean_motion: line2[52..63].trim()
             .parse::<f64>()
             .expect("Could not parse mean_motion."),
-        revolution_number: line2[64..68].trim()
+        revolution_number: line2[63..68].trim()
             .parse::<u32>()
             .expect("Could not parse revolution_number."),
     };
@@ -485,7 +485,7 @@ fn parse_decimal_point_assumed(input: String) -> f64 {
             exponent = input[exp_index..].parse::<f64>()
             .expect("Could not parse exponent.")
         }
-        return format!("{:.8}",base * 10f64.powf(exponent)).parse::<f64>().expect("Could not parse rounded decimal point assumed.")
+        return format!("{:.15}",base * 10f64.powf(exponent)).parse::<f64>().expect("Could not parse rounded decimal point assumed.")
     } else if input.contains('-') {
         return format!("-0.{}", input)
             .parse::<f64>()
@@ -494,5 +494,81 @@ fn parse_decimal_point_assumed(input: String) -> f64 {
         return format!("0.{}", input)
             .parse::<f64>()
             .expect("Could not parse decimal point assumed value at parse_decimal_point_assumed")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_epoch_parser() {
+        assert_eq!(1718748281, get_epoch_from_tle("24170.91992694".to_string()).timestamp())
+    }
+
+    #[test]
+    fn test_decimal_point_parser() {
+        assert_eq!(0.00014141 as f64, parse_decimal_point_assumed("14141-3".to_string()));
+
+        assert_eq!(parse_decimal_point_assumed("00000-0".to_string()), 0.0 as f64);
+
+        assert_eq!(parse_decimal_point_assumed("-36258-4".to_string()), -0.36258e-4);
+    }
+
+    #[test]
+    fn test_tle_parse() {
+        let mut raw_tle = 
+        "ISS (ZARYA)
+        1 25544U 98067A   20045.18587073  .00000950  00000-0  25302-4 0  9990
+        2 25544  51.6443 242.0161 0004885 264.6060 207.3845 15.49165514212791";
+        
+        let expected = TLE {
+            name: "ISS (ZARYA)".to_string(),
+            satellite_number: 25544,
+            classification: 'U',
+            international_designator: "98067A".to_string(),
+            epoch: 1581654459,
+            date_time: "2020-02-14T04:27:39.231+00:00".to_string(),
+            first_derivative_mean_motion: 0.00000950,
+            second_derivative_mean_motion: 0.0,
+            drag_term: 0.25302e-4,
+            ephemeris_type: 0,
+            element_number: 999,
+            inclination: 51.6443,
+            right_ascension: 242.0161,
+            eccentricity: 0.0004885,
+            argument_of_perigee: 264.6060,
+            mean_anomaly: 207.3845,
+            mean_motion: 15.49165514,
+            revolution_number: 21279,
+        };
+        
+        let tle = parse_tle(&raw_tle.to_string());
+        assert_eq!(tle, expected);
+
+        raw_tle = "GRUS-1A
+        1 43890U 18111Q   20044.88470557  .00000320  00000-0  36258-4 0  9993
+        2 43890  97.7009 312.6237 0003899   7.8254 352.3026 14.92889838 61757";
+        
+        let tle = parse_tle(&raw_tle.to_string());
+
+        assert_eq!(tle.name, "GRUS-1A");
+        assert_eq!(tle.satellite_number, 43890);
+        assert_eq!(tle.classification, 'U');
+        assert_eq!(tle.international_designator, "18111Q");
+        assert_eq!(tle.epoch, 1581628438);
+        assert_eq!(tle.first_derivative_mean_motion, 0.00000320);
+        assert_eq!(tle.second_derivative_mean_motion, 0.0);
+        assert_eq!(tle.drag_term, 0.36258e-4);
+        assert_eq!(tle.ephemeris_type, 0);
+        assert_eq!(tle.element_number, 999);
+        // 2nd line
+        assert_eq!(tle.inclination, 97.7009);
+        assert_eq!(tle.right_ascension, 312.6237);
+        assert_eq!(tle.eccentricity, 0.0003899);
+        assert_eq!(tle.argument_of_perigee, 7.8254);
+        assert_eq!(tle.mean_anomaly, 352.3026);
+        assert_eq!(tle.mean_motion, 14.92889838);
+        assert_eq!(tle.revolution_number, 6175);
     }
 }
