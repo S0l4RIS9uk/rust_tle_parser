@@ -128,6 +128,7 @@ pub fn parse_tle(tle: &String) -> TLE {
 }
 
 fn get_epoch_from_tle(tle_epoch: String) -> DateTime<Utc> {
+    println!("{}", tle_epoch );
     // get year from first 2 chars
     let mut epoch_year: i32 = tle_epoch[0..2]
         .to_string()

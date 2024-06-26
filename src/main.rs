@@ -2,46 +2,26 @@ use std::fs::{self, write};
 mod fetch;
 mod parse;
 use parse::{TLE, parse_tle, split_tle};
-use fetch::fetch_tle;
+use fetch::{fetch_tle, load_tle_cache, Cache};
 
 
 #[tokio::main]
 async fn main() -> Result<(), fetch::Error> {
-    let res = fetch_tle("GROUP=weather".to_string()).await?;
-    let lines = split_tle(res.to_string());
-    println!("{}", lines[0].to_string());
-    println!("{}", parse_tle(&lines[0]).to_string());
-    let parsed = lines.iter().map(parse_tle);
-    if !fs::metadata("./output").is_ok() {
-        fs::create_dir("./output").expect("Could not create output dir.");
-        write(
-            "./output/test.txt",
-            parsed
-                .clone()
-                .map(|tle: TLE| tle.to_string())
-                .collect::<Vec<String>>()
-                .join("\n\n"),
-        )?;
-        write(
-            "./output/test.json",
-            serde_json::to_string_pretty(&parsed.collect::<Vec<TLE>>())
-                .expect("Failed to serialise TLE's"),
-        )?;
-    } else {
-        write(
-            "./output/test.txt",
-            parsed
-                .clone()
-                .map(|tle: TLE| tle.to_string())
-                .collect::<Vec<String>>()
-                .join("\n\n"),
-        )?;
-        write(
-            "./output/test.json",
-            serde_json::to_string_pretty(&parsed.collect::<Vec<TLE>>())
-                .expect("Failed to serialise TLE's"),
-        )?;
+    println!("Initalising Cache.");
+    let mut cache = load_tle_cache(Some("./output/cache.json".to_string())).await.expect("Failed to load cache.");
+    println!("Cache initalised with length.");
+
+    match cache.get_tle(25544).await {
+        Ok(tle) => println!("{}", tle),
+        Err(e) => println!("Error occurred whilst getting TLE from cache: {}", e),
     }
+
+    match cache.get_tle(99999).await {
+        Ok(tle) => println!("{}", tle),
+        Err(e) => println!("Error occurred whilst getting TLE from cache: {}", e),
+    }
+    
+    cache.to_file("./output/cache.json".to_string());
 
     Ok(())
 }
