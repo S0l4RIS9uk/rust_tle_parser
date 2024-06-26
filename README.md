@@ -8,3 +8,4 @@ A TLE fetch and parse project built in rust, utilises data pulled from Celestrak
     - Implement a cache using norad currentGP to initalise and supGP to maintain/fetch more up to date data.
 - Tidy up and convert to proper library
 - Correct documentation etc.
+- test
