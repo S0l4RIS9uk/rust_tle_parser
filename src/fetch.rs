@@ -3,7 +3,6 @@ use chrono::Utc;
 use error_chain::error_chain;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use tokio::io::split;
 
 error_chain! {
     foreign_links {
@@ -22,6 +21,11 @@ impl Cache {
     pub fn new() -> Self {
         Cache {last_bulk_update: -1, tles: Vec::new()}
     }
+
+    /* 
+    Serialises the cache and writes it as json to the 
+    specified location, which should end in `.json`.
+    */
     pub fn to_file(&self, path: String) -> Result<()> {
         fs::write(
             path,
@@ -30,6 +34,10 @@ impl Cache {
         Ok(())
     }
 
+    /*
+    Bulk updates the TLE's in the cache by querying Celestrak
+    with "GROUP=active". Returns a reference to the cache.
+    */
     pub async fn update(&mut self) -> Result<&Cache> {
         let updated_tles =
             split_tle(fetch_tle("GROUP=active".to_string(), QueryType::Standard).await?)
@@ -53,6 +61,13 @@ impl Cache {
         Ok(self)
     }
 
+    /* 
+    Tries to fetch the TLE for the given Satellite Number.
+    First tries the cache then tries a standard gp query,
+    if that fails, tries a supplementary gp query. If all 
+    fails returns an error, if any query succeeds returns
+    tle and adds it to the cache.
+    */
     pub async fn get_tle(&mut self, sat_num: u32) -> std::result::Result<&TLE, Error> {
         let tles: &mut Vec<TLE> = &mut self.tles;
         if let Some(index) = tles.iter().position(|tle| tle.satellite_number == sat_num) {
@@ -76,6 +91,11 @@ impl Cache {
     }
 }
 
+/*
+Creates a new in-memory cache either by reading from a 
+json file containing it or initalising it with a 
+`GROUP=active` query to celestrak.
+*/
 pub async fn load_tle_cache(path: Option<String>) -> Result<Cache> {
     if path.is_none() {
         let cache: Cache = Cache {
@@ -110,23 +130,24 @@ pub enum QueryType {
     Supplementary,
 }
 
-// TODO: Strictly type query options, validate query & cache results.
-pub async fn fetch_tle(query: String, request_type: QueryType) -> Result<String> {
+async fn fetch_tle(query: String, request_type: QueryType) -> std::result::Result<String, Error> {
     let mut query_type = "gp";
     if request_type == QueryType::Standard {
         query_type = "gp";
     } else if request_type == QueryType::Supplementary {
         query_type = "supplemental/sup-gp";
     }
-    println!("Generated url is {}", format!(
-        "https://celestrak.org/NORAD/elements/{}.php?{}&FORMAT=tle",
-        query_type, query
-    ));
+
     let res = reqwest::get(&format!(
         "https://celestrak.org/NORAD/elements/{}.php?{}&FORMAT=tle",
         query_type, query
     ))
     .await?;
+
+    if res.status() != 200 {
+        return Err(format!("Query to celestrak failed with code {}", res.status()).into());
+    }
+
     let body = res.text().await?;
 
         /* let body = "NOAA 15

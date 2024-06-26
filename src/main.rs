@@ -1,14 +1,12 @@
-use std::fs::{self, write};
 mod fetch;
 mod parse;
-use parse::{TLE, parse_tle, split_tle};
-use fetch::{fetch_tle, load_tle_cache, Cache};
+use fetch::{load_tle_cache, Cache};
 
 
 #[tokio::main]
 async fn main() -> Result<(), fetch::Error> {
     println!("Initalising Cache.");
-    let mut cache = load_tle_cache(Some("./output/cache.json".to_string())).await.expect("Failed to load cache.");
+    let mut cache: Cache = load_tle_cache(Some("./output/cache.json".to_string())).await.expect("Failed to load cache.");
     println!("Cache initalised with length.");
 
     match cache.get_tle(25544).await {
@@ -20,7 +18,7 @@ async fn main() -> Result<(), fetch::Error> {
         Ok(tle) => println!("{}", tle),
         Err(e) => println!("Error occurred whilst getting TLE from cache: {}", e),
     }
-    
+
     cache.to_file("./output/cache.json".to_string());
 
     Ok(())

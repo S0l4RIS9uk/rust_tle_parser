@@ -54,6 +54,8 @@ impl Display for TLE {
     }
 }
 
+
+// Splits a large string into groups of 3.
 pub fn split_tle(tles: String) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut grouped = String::new();
@@ -70,6 +72,8 @@ pub fn split_tle(tles: String) -> Vec<String> {
     return lines;
 }
 
+
+// Takes a 3 line element as a string and parses it into a TLE struct.
 pub fn parse_tle(tle: &String) -> TLE {
     let mut lines = tle.lines();
 
@@ -127,6 +131,8 @@ pub fn parse_tle(tle: &String) -> TLE {
     return parsed_tle;
 }
 
+
+// Parses a string into a utc chrono::DateTime object
 fn get_epoch_from_tle(tle_epoch: String) -> DateTime<Utc> {
     println!("{}", tle_epoch );
     // get year from first 2 chars
@@ -180,6 +186,7 @@ fn get_epoch_from_tle(tle_epoch: String) -> DateTime<Utc> {
     return date_time.and_utc();
 }
 
+// Parses a decimal point assumed string into a float.
 fn parse_decimal_point_assumed(input: String) -> f64 {
     if input.contains('+') || input.contains('-') && !input.starts_with('-') || input.matches('-').count() == 2 {
         let exp_index: usize;
@@ -207,6 +214,7 @@ fn parse_decimal_point_assumed(input: String) -> f64 {
             exponent = input[exp_index..].parse::<f64>()
             .expect("Could not parse exponent.")
         }
+        // 15 dp is the general accuracy of a f64.
         return format!("{:.15}",base * 10f64.powf(exponent)).parse::<f64>().expect("Could not parse rounded decimal point assumed.")
     } else if input.contains('-') {
         return format!("-0.{}", input)
